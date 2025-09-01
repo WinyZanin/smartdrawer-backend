@@ -1,7 +1,7 @@
 ﻿import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Application } from 'express';
-
+import Logger from '../logger/logger';
 /**
  * Swagger Configuration
  *
@@ -279,7 +279,7 @@ export const setupSwagger = (app: Application): void => {
     res.send(specs);
   });
 
-  console.log('Swagger documentation available at: http://localhost:3000/api-docs');
+  Logger.debug('Swagger documentation available at: http://localhost:3000/api-docs');
 };
 
 export default specs;

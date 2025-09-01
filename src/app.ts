@@ -4,6 +4,8 @@ import { json } from 'body-parser';
 import devicesRoutes from './routes/devices/devices.routes';
 import healthRoutes from './routes/health.routes';
 import { setupSwagger } from './config/swagger';
+import Logger from './logger/logger';
+import morganMiddleware from './logger/morganMiddleware';
 
 /**
  * Configuração do servidor Express
@@ -14,8 +16,13 @@ const app = express();
 app.use(cors());
 app.use(json());
 
+// Morgan middleware
+app.use(morganMiddleware);
+
 // Setup Swagger documentation
 setupSwagger(app);
+
+Logger.info('App initialized');
 
 // rotas principais
 app.use('/api/v1/devices', devicesRoutes);
