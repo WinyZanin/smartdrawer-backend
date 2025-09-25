@@ -1,5 +1,6 @@
 import { DevicesRepository } from '../../repositories/devices/DevicesRepository';
-import { Device, CreateDeviceDto, UpdateDeviceDto, DeviceStatus } from '../../types/devices.types';
+import { Device, CreateDeviceDto, UpdateDeviceDto, DeviceStatus, CommandDto } from '../../types/devices.types';
+import Logger from '../../logger/logger';
 
 /**
  * DevicesService
@@ -10,6 +11,8 @@ import { Device, CreateDeviceDto, UpdateDeviceDto, DeviceStatus } from '../../ty
  */
 export class DevicesService {
   private devicesRepository: DevicesRepository;
+  private commandsQueue: Record<string, CommandDto[]> = {}; // Exemplo em memória
+  private logger = Logger.child({ component: 'DevicesService' });
 
   /**
    * Constructor - Injects the DevicesRepository dependency
@@ -17,6 +20,7 @@ export class DevicesService {
    */
   constructor(devicesRepository: DevicesRepository) {
     this.devicesRepository = devicesRepository;
+    this.logger.debug('DevicesService initialized');
   }
 
   /**
@@ -24,9 +28,15 @@ export class DevicesService {
    * @returns Promise<Device[]> Array of all devices
    */
   async getAllDevices(): Promise<Device[]> {
+    this.logger.debug('getAllDevices called');
     try {
-      return await this.devicesRepository.findAll();
-    } catch {
+      const devices = await this.devicesRepository.findAll();
+      this.logger.info(`Found ${devices.length} devices in database`);
+      return devices;
+    } catch (error) {
+      this.logger.error('Database error in getAllDevices', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       throw new Error('Failed to retrieve devices');
     }
   }
@@ -38,15 +48,39 @@ export class DevicesService {
    * @throws Error if ID is invalid
    */
   async getDeviceById(id: string): Promise<Device | null> {
-    // Business rule: ID cannot be empty
-    if (!id || id.trim() === '') {
-      throw new Error('Device ID is required and cannot be empty');
+    const logger = this.logger.child({ method: 'getDeviceById' });
+    logger.debug('DevicesService.getDeviceById called', {
+      id,
+      idType: typeof id,
+      idLength: id?.length,
+      isString: typeof id === 'string',
+      isEmpty: !id || id.trim() === '',
+    });
+
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      logger.warn('Invalid device ID provided', {
+        id,
+        idType: typeof id,
+        isEmpty: !id,
+        isWhitespace: typeof id === 'string' && id.trim() === '',
+      });
+      return null;
     }
 
     try {
-      return await this.devicesRepository.findById(id);
-    } catch {
-      throw new Error(`Failed to retrieve device with ID: ${id}`);
+      const device = await this.devicesRepository.findById(id);
+      logger.debug('Device retrieval result', {
+        id,
+        found: !!device,
+        deviceId: device?.id,
+      });
+      return device;
+    } catch (error) {
+      logger.error('Error retrieving device', {
+        id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
     }
   }
 
@@ -97,6 +131,16 @@ export class DevicesService {
       throw new Error('Device name must be at least 2 characters long');
     }
 
+    // Business rule: Secret is required and must be meaningful
+    if (!deviceData.secret || deviceData.secret.trim() === '') {
+      throw new Error('Device secret is required and cannot be empty');
+    }
+
+    // Business rule: Secret should be at least 6 characters long
+    if (deviceData.secret.trim().length < 6) {
+      throw new Error('Device secret must be at least 6 characters long');
+    }
+
     // Business rule: Validate status if provided
     if (deviceData.status && !this.isValidStatus(deviceData.status)) {
       throw new Error('Invalid device status provided');
@@ -107,6 +151,7 @@ export class DevicesService {
         name: deviceData.name.trim(),
         location: deviceData.location ? deviceData.location.trim() : null,
         status: deviceData.status || 'INACTIVE',
+        secret: deviceData.secret.trim(),
       });
 
       return device;
@@ -129,7 +174,7 @@ export class DevicesService {
     }
 
     // Business rule: At least one field must be provided for update
-    if (!deviceData.name && !deviceData.location && !deviceData.status) {
+    if (!deviceData.name && !deviceData.location && !deviceData.status && !deviceData.secret) {
       throw new Error('At least one field must be provided for update');
     }
 
@@ -154,6 +199,16 @@ export class DevicesService {
       throw new Error('Invalid device status provided');
     }
 
+    // Business rule: Secret validation if provided
+    if (deviceData.secret !== undefined) {
+      if (!deviceData.secret || deviceData.secret.trim() === '') {
+        throw new Error('Device secret cannot be empty');
+      }
+      if (deviceData.secret.trim().length < 6) {
+        throw new Error('Device secret must be at least 6 characters long');
+      }
+    }
+
     try {
       const updateData: UpdateDeviceDto = {};
 
@@ -165,6 +220,9 @@ export class DevicesService {
       }
       if (deviceData.status !== undefined) {
         updateData.status = deviceData.status;
+      }
+      if (deviceData.secret !== undefined) {
+        updateData.secret = deviceData.secret.trim();
       }
 
       return await this.devicesRepository.update(id, updateData);
@@ -230,5 +288,16 @@ export class DevicesService {
   private isValidStatus(status: string): status is DeviceStatus {
     const validStatuses: DeviceStatus[] = ['INACTIVE', 'ACTIVE', 'ERROR'];
     return validStatuses.includes(status as DeviceStatus);
+  }
+
+  async getNextCommandForDevice(id: string): Promise<CommandDto | null> {
+    const queue = this.commandsQueue[id] || [];
+    const cmd = queue.length > 0 ? queue.shift() : undefined;
+    return cmd === undefined ? null : cmd;
+  }
+
+  async queueCommandForDevice(id: string, command: CommandDto) {
+    if (!this.commandsQueue[id]) this.commandsQueue[id] = [];
+    this.commandsQueue[id].push(command);
   }
 }

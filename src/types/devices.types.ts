@@ -22,6 +22,8 @@ export interface Device {
   createdAt: Date;
   /** Timestamp when the device was last updated */
   updatedAt: Date;
+  /** Secret key for the device */
+  secret: string;
 }
 
 /**
@@ -39,6 +41,8 @@ export interface CreateDeviceDto {
   location?: string | null;
   /** Optional initial status (defaults to INACTIVE) */
   status?: string;
+  /** Secret key for device authentication */
+  secret: string;
 }
 
 /**
@@ -51,4 +55,10 @@ export interface UpdateDeviceDto {
   location?: string | null;
   /** Optional updated status */
   status?: string;
+  /** Optional updated secret */
+  secret?: string;
+}
+
+export interface CommandDto {
+  command: string;
 }

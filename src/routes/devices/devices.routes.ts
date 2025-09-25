@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { DevicesController } from '../../controllers/devices/DevicesController';
-import { DevicesService } from '../../services/devices/DevicesService';
-import { DevicesRepository } from '../../repositories/devices/DevicesRepository';
+import { devicesService } from '../../container';
+import { authenticateDeviceJWT } from '../../middleware/deviceAuth';
 
 /**
  * Devices Routes
@@ -14,9 +14,7 @@ import { DevicesRepository } from '../../repositories/devices/DevicesRepository'
 // Create router instance
 const router = Router();
 
-// Dependency injection setup
-const devicesRepository = new DevicesRepository();
-const devicesService = new DevicesService(devicesRepository);
+// Dependency injection setup via container
 const devicesController = new DevicesController(devicesService);
 
 /**
@@ -169,23 +167,31 @@ router.get('/:id', devicesController.getDeviceById);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CreateDeviceDto'
- *           examples:
- *             basic:
- *               summary: Basic device creation
- *               value:
- *                 name: "Main Drawer Unit 01"
- *                 location: "Building A - Floor 2"
- *                 status: "INACTIVE"
- *             minimal:
- *               summary: Minimal device creation (only name)
- *               value:
- *                 name: "Simple Drawer"
- *             with_location:
- *               summary: Device with location only
- *               value:
- *                 name: "Smart Drawer Pro"
- *                 location: "Office Building - Room 301"
+ *             type: object
+ *             required:
+ *               - name
+ *               - secret
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 2
+ *                 description: The device name
+ *                 example: "Main Drawer Unit 01"
+ *               location:
+ *                 type: string
+ *                 nullable: true
+ *                 description: The device location
+ *                 example: "Building A - Floor 2"
+ *               status:
+ *                 type: string
+ *                 enum: [ACTIVE, INACTIVE, ERROR]
+ *                 description: The device status
+ *                 example: "INACTIVE"
+ *               secret:
+ *                 type: string
+ *                 minLength: 6
+ *                 description: The device secret key for authentication
+ *                 example: "abc123"
  *     responses:
  *       201:
  *         description: Device created successfully
@@ -238,19 +244,23 @@ router.post('/', devicesController.createDevice);
  *                 name: "Updated Drawer Unit"
  *                 location: "Building B - Floor 3"
  *                 status: "ACTIVE"
+ *                 secret: "newsecret456"
  *             partial_update:
  *               summary: Update only status
  *               value:
  *                 status: "ERROR"
+ *                 secret: "newsecret456"
  *             location_update:
  *               summary: Update location and name
  *               value:
  *                 name: "Relocated Drawer"
  *                 location: "New Building - Floor 1"
+ *                 secret: "newsecret456"
  *             clear_location:
  *               summary: Clear location (set to null)
  *               value:
  *                 location: null
+ *                 secret: null
  *     responses:
  *       200:
  *         description: Device updated successfully
@@ -314,5 +324,107 @@ router.put('/:id', devicesController.updateDevice);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.delete('/:id', devicesController.deleteDevice);
+
+/**
+ * @swagger
+ * /devices/{id}/next-command:
+ *   get:
+ *     summary: Get the next command for a device
+ *     description: Retrieve the next scheduled command for a specific device. Requires device authentication.
+ *     tags: [Devices]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 1
+ *         description: The device unique identifier
+ *         example: clp123abc456def789
+ *     responses:
+ *       200:
+ *         description: Next command retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Command'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+//router.get('/:id/next-command', verifyJWT, devicesController.getNextCommand);
+router.get('/:id/next-command', authenticateDeviceJWT, devicesController.getNextCommand);
+
+/**
+ * @swagger
+ * /devices/{id}/commands:
+ *   post:
+ *     summary: Create a new command for a device
+ *     description: Schedule a new command to be executed by a specific device
+ *     tags: [Devices]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 1
+ *         description: The device unique identifier
+ *         example: clp123abc456def789
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               command:
+ *                 type: string
+ *                 minLength: 1
+ *                 description: The command to be executed
+ *                 example: turn_on
+ *             required:
+ *               - command
+ *           examples:
+ *             example1:
+ *               value:
+ *                 command: turn_on
+ *             example2:
+ *               value:
+ *                 command: turn_off
+ *     responses:
+ *       201:
+ *         description: Command created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Command'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post('/:id/commands', devicesController.queueCommand);
 
 export default router;

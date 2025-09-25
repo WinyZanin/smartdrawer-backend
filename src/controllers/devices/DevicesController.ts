@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { DevicesService } from '../../services/devices/DevicesService';
 import { CreateDeviceDto, UpdateDeviceDto, DeviceStatus } from '../../types/devices.types';
+import Logger from '../../logger/logger';
 
 /**
  * DevicesController
@@ -11,6 +12,7 @@ import { CreateDeviceDto, UpdateDeviceDto, DeviceStatus } from '../../types/devi
  */
 export class DevicesController {
   private devicesService: DevicesService;
+  private logger = Logger.child({ component: 'DevicesController' });
 
   /**
    * Constructor - Injects the DevicesService dependency
@@ -18,6 +20,7 @@ export class DevicesController {
    */
   constructor(devicesService: DevicesService) {
     this.devicesService = devicesService;
+    this.logger.debug('DevicesController initialized');
   }
 
   /**
@@ -25,8 +28,10 @@ export class DevicesController {
    * Retrieve all devices
    */
   getAllDevices = async (req: Request, res: Response): Promise<void> => {
+    this.logger.info('Fetching all devices');
     try {
       const devices = await this.devicesService.getAllDevices();
+      this.logger.info(`Retrieved ${devices.length} devices successfully`);
 
       res.status(200).json({
         success: true,
@@ -34,6 +39,9 @@ export class DevicesController {
         count: devices.length,
       });
     } catch (error) {
+      this.logger.error('Failed to retrieve devices', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       res.status(500).json({
         success: false,
         error: 'Failed to retrieve devices',
@@ -47,11 +55,14 @@ export class DevicesController {
    * Retrieve a specific device by ID
    */
   getDeviceById = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    this.logger.info('Fetching device by ID', { deviceId: id });
+
     try {
-      const { id } = req.params;
       const device = await this.devicesService.getDeviceById(id);
 
       if (!device) {
+        this.logger.warn('Device not found', { deviceId: id });
         res.status(404).json({
           success: false,
           error: 'Device not found',
@@ -60,12 +71,18 @@ export class DevicesController {
         return;
       }
 
+      this.logger.info('Device retrieved successfully', { deviceId: id });
       res.status(200).json({
         success: true,
         data: device,
       });
     } catch (error) {
       const statusCode = error instanceof Error && error.message.includes('required') ? 400 : 500;
+      this.logger.error('Failed to retrieve device', {
+        deviceId: id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        statusCode,
+      });
 
       res.status(statusCode).json({
         success: false,
@@ -148,11 +165,14 @@ export class DevicesController {
    * Create a new device
    */
   createDevice = async (req: Request, res: Response): Promise<void> => {
+    const { name, location, status, secret }: CreateDeviceDto = req.body;
+
+    this.logger.info('Creating new device', { deviceName: name, location });
+
     try {
       // Basic request validation
-      const { name, location, status }: CreateDeviceDto = req.body;
-
       if (!name) {
+        this.logger.warn('Device creation failed - missing name');
         res.status(400).json({
           success: false,
           error: 'Validation error',
@@ -161,13 +181,29 @@ export class DevicesController {
         return;
       }
 
+      if (!secret) {
+        this.logger.warn('Device creation failed - missing secret');
+        res.status(400).json({
+          success: false,
+          error: 'Validation error',
+          message: 'Device secret is required',
+        });
+        return;
+      }
+
       const deviceData: CreateDeviceDto = {
         name,
         location: location || null,
         status: (status as DeviceStatus) || undefined,
+        secret,
       };
 
       const device = await this.devicesService.createDevice(deviceData);
+
+      this.logger.info('Device created successfully', {
+        deviceId: device.id,
+        deviceName: device.name,
+      });
 
       res.status(201).json({
         success: true,
@@ -176,6 +212,12 @@ export class DevicesController {
       });
     } catch (error) {
       const statusCode = error instanceof Error && error.message.includes('required') ? 400 : 500;
+
+      this.logger.error('Failed to create device', {
+        deviceName: name,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        statusCode,
+      });
 
       res.status(statusCode).json({
         success: false,
@@ -192,13 +234,14 @@ export class DevicesController {
   updateDevice = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { name, location, status }: UpdateDeviceDto = req.body;
+      const { name, location, status, secret }: UpdateDeviceDto = req.body;
 
       const updateData: UpdateDeviceDto = {};
 
       if (name !== undefined) updateData.name = name;
       if (location !== undefined) updateData.location = location;
       if (status !== undefined) updateData.status = status as DeviceStatus;
+      if (secret !== undefined) updateData.secret = secret;
 
       const device = await this.devicesService.updateDevice(id, updateData);
 
@@ -274,6 +317,66 @@ export class DevicesController {
       res.status(500).json({
         success: false,
         error: 'Failed to retrieve device statistics',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
+
+  /**
+   * GET /devices/:id/next-command
+   * Dispositivo faz polling para buscar próximo comando
+   */
+  getNextCommand = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      // Aqui você busca o próximo comando pendente para o dispositivo
+      const command = await this.devicesService.getNextCommandForDevice(id);
+
+      if (!command) {
+        res.status(204).send(); // Sem comando pendente
+        return;
+      }
+
+      res.status(200).json({ command });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch next command',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
+
+  /**
+   * POST /devices/:id/queue-command
+   * Queue a command for the device
+   */
+  // Note: This endpoint would typically be protected to allow only authorized users to queue commands.
+  queueCommand = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const command = req.body;
+
+      if (!command || Object.keys(command).length === 0) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request',
+          message: 'Command data is required',
+        });
+        return;
+      }
+
+      await this.devicesService.queueCommandForDevice(id, command);
+
+      res.status(200).json({
+        success: true,
+        message: 'Command queued successfully',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to queue command',
         message: error instanceof Error ? error.message : 'Unknown error',
       });
     }

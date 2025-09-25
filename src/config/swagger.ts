@@ -44,8 +44,25 @@ const options = {
         name: 'Health',
         description: 'API health check',
       },
+      {
+        name: 'Authentication',
+        description: 'Device authentication operations',
+      },
+    ],
+    security: [
+      {
+        bearerAuth: [],
+      },
     ],
     components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT token for device authentication. Obtain token from /auth/device endpoint.',
+        },
+      },
       schemas: {
         Device: {
           type: 'object',
@@ -182,6 +199,45 @@ const options = {
             },
           },
         },
+        Command: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Unique identifier for the command',
+              example: 'cmd_123abc456def789',
+            },
+            deviceId: {
+              type: 'string',
+              description: 'ID of the target device',
+              example: 'clp123abc456def789',
+            },
+            command: {
+              type: 'string',
+              description: 'Command to be executed',
+              example: 'turn_on',
+            },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'EXECUTED', 'FAILED'],
+              description: 'Current status of the command',
+              example: 'PENDING',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Timestamp when the command was created',
+              example: '2025-09-08T23:45:00.000Z',
+            },
+            executedAt: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true,
+              description: 'Timestamp when the command was executed',
+              example: '2025-09-08T23:46:00.000Z',
+            },
+          },
+        },
         ErrorResponse: {
           type: 'object',
           properties: {
@@ -233,6 +289,21 @@ const options = {
             },
           },
         },
+        Unauthorized: {
+          description: 'Unauthorized - Invalid or missing JWT token',
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/ErrorResponse',
+              },
+              example: {
+                success: false,
+                error: 'Unauthorized',
+                message: 'Invalid or missing authorization token',
+              },
+            },
+          },
+        },
         InternalServerError: {
           description: 'Internal server error',
           content: {
@@ -257,6 +328,8 @@ const options = {
 // Generate the Swagger specification
 const specs = swaggerJsdoc(options);
 
+// Logger configuration
+const logger = Logger.child({ component: 'Swagger' });
 /**
  * Setup Swagger documentation
  * @param app - Express application instance
@@ -279,7 +352,7 @@ export const setupSwagger = (app: Application): void => {
     res.send(specs);
   });
 
-  Logger.debug('Swagger documentation available at: http://localhost:3000/api-docs');
+  logger.debug('Swagger documentation available at: http://localhost:3000/api-docs');
 };
 
 export default specs;

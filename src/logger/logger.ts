@@ -39,11 +39,30 @@ winston.addColors(colors);
 // Chose the aspect of your log customizing the log format.
 const format = winston.format.combine(
   // Add the message timestamp with the preferred format
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-  // Tell Winston that the logs must be colored
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  // Define the format of the message showing the timestamp, the level, component and the message
+  winston.format.printf((info) => {
+    const component = info.component ? `[${info.component}]` : '';
+    const level = info.level.toUpperCase();
+
+    // Extract metadata (everything except the standard winston fields)
+    const standardFields = ['timestamp', 'level', 'message', 'component'];
+    const meta = Object.keys(info)
+      .filter((key) => !standardFields.includes(key))
+      .reduce(
+        (obj, key) => {
+          obj[key] = info[key];
+          return obj;
+        },
+        {} as Record<string, unknown>,
+      );
+
+    const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta, null, 2)}` : '';
+
+    return `[${info.timestamp}] ${level} ${component}: ${info.message}${metaStr}`;
+  }),
+  // Apply colors after formatting
   winston.format.colorize({ all: true }),
-  // Define the format of the message showing the timestamp, the level and the message
-  winston.format.printf((info) => `${info.timestamp} ${info.level}: ${info.message}`),
 );
 
 // Define which transports the logger must use to print out messages.

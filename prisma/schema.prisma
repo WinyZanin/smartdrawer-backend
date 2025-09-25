@@ -10,7 +10,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite" // env("DATABASE_PROVIDER")
   url      = env("DATABASE_URL")
 }
 
@@ -21,4 +21,5 @@ model Device {
   status    String   @default("INACTIVE") // INACTIVE | ACTIVE | ERROR
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  secret    String   @default(cuid())
 }

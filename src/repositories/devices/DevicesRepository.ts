@@ -1,5 +1,6 @@
 import prisma from '../../db/prisma';
 import { Device, CreateDeviceDto, UpdateDeviceDto } from '../../types/devices.types';
+import Logger from '../../logger/logger';
 
 /**
  * DevicesRepository
@@ -9,14 +10,26 @@ import { Device, CreateDeviceDto, UpdateDeviceDto } from '../../types/devices.ty
  * interface for the service layer to interact with the database.
  */
 export class DevicesRepository {
+  private logger = Logger.child({ component: 'DevicesRepository' });
+
   /**
    * Find all devices in the database
    * @returns Promise<Device[]> Array of all devices
    */
   async findAll(): Promise<Device[]> {
-    return prisma.device.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+    this.logger.debug('Fetching all devices from database');
+    try {
+      const devices = await prisma.device.findMany({
+        orderBy: { createdAt: 'desc' },
+      });
+      this.logger.debug(`Retrieved ${devices.length} devices from database`);
+      return devices;
+    } catch (error) {
+      this.logger.error('Database error in findAll', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
   }
 
   /**
@@ -25,9 +38,20 @@ export class DevicesRepository {
    * @returns Promise<Device | null> The device if found, null otherwise
    */
   async findById(id: string): Promise<Device | null> {
-    return prisma.device.findUnique({
-      where: { id },
-    });
+    this.logger.debug('Finding device by ID', { deviceId: id });
+    try {
+      const device = await prisma.device.findUnique({
+        where: { id },
+      });
+      this.logger.debug(`Device ${device ? 'found' : 'not found'}`, { deviceId: id });
+      return device;
+    } catch (error) {
+      this.logger.error('Database error in findById', {
+        deviceId: id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
   }
 
   /**
@@ -60,13 +84,28 @@ export class DevicesRepository {
    * @returns Promise<Device> The created device
    */
   async create(data: CreateDeviceDto): Promise<Device> {
-    return prisma.device.create({
-      data: {
-        name: data.name,
-        location: data.location || null,
-        status: data.status || 'INACTIVE',
-      },
-    });
+    this.logger.debug('Creating new device', { deviceName: data.name });
+    try {
+      const device = await prisma.device.create({
+        data: {
+          name: data.name,
+          location: data.location || null,
+          status: data.status || 'INACTIVE',
+          secret: data.secret,
+        },
+      });
+      this.logger.info('Device created successfully', {
+        deviceId: device.id,
+        deviceName: device.name,
+      });
+      return device;
+    } catch (error) {
+      this.logger.error('Database error in create', {
+        deviceName: data.name,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
   }
 
   /**
@@ -82,6 +121,7 @@ export class DevicesRepository {
         ...(data.name && { name: data.name }),
         ...(data.location !== undefined && { location: data.location }),
         ...(data.status && { status: data.status }),
+        ...(data.secret && { secret: data.secret }),
       },
     });
   }
