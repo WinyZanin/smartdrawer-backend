@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { DevicesService } from '../../services/devices/DevicesService';
-import { CreateDeviceDto, UpdateDeviceDto, DeviceStatus } from '../../types/devices.types';
+import { CreateDeviceDto, UpdateDeviceDto, DeviceStatus, CommandDto } from '../../types/devices.types';
 import Logger from '../../logger/logger';
 
 /**
@@ -323,12 +323,53 @@ export class DevicesController {
   };
 
   /**
+   * GET /devices/stats/:id
+   * Get the status of a specific device
+   */
+  getDeviceStat = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const status = await this.devicesService.getDeviceStatus(id);
+
+      if (!status) {
+        res.status(404).json({
+          success: false,
+          error: 'Device not found',
+          message: `No device found with ID: ${id}`,
+        });
+        return;
+      }
+
+      res.status(200).json({ ...status });
+    } catch (error) {
+      let statusCode = 500;
+
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          statusCode = 404;
+        } else if (error.message.includes('required')) {
+          statusCode = 400;
+        }
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        error: 'Failed to retrieve device status',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
+
+  /**
    * GET /devices/:id/next-command
    * Dispositivo faz polling para buscar próximo comando
    */
   getNextCommand = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+
+      // Atualiza a ultima verificação de comandos do dispositivo
+      this.devicesService.updateLastPoll(id);
 
       // Aqui você busca o próximo comando pendente para o dispositivo
       const command = await this.devicesService.getNextCommandForDevice(id);
@@ -338,7 +379,7 @@ export class DevicesController {
         return;
       }
 
-      res.status(200).json({ command });
+      res.status(200).json({ ...command });
     } catch (error) {
       res.status(500).json({
         success: false,
@@ -356,13 +397,22 @@ export class DevicesController {
   queueCommand = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const command = req.body;
+      const command: CommandDto = {
+        action: req.body.action,
+        drawer: req.body.drawer,
+      };
 
-      if (!command || Object.keys(command).length === 0) {
+      if (
+        !command ||
+        typeof command.action !== 'string' ||
+        !command.action ||
+        typeof command.drawer !== 'number' ||
+        isNaN(command.drawer)
+      ) {
         res.status(400).json({
           success: false,
           error: 'Invalid request',
-          message: 'Command data is required',
+          message: 'Command must have a valid action (string) and drawer (number)' + JSON.stringify(command),
         });
         return;
       }
@@ -377,6 +427,76 @@ export class DevicesController {
       res.status(500).json({
         success: false,
         error: 'Failed to queue command',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
+
+  /**
+   * Open a specific drawer for a device
+   * @param req - The request object
+   * @param res - The response object
+   * @returns Promise<void>
+   */
+  openDrawer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id, drawerNumber } = req.params;
+      const drawerNumberInt = parseInt(drawerNumber, 10);
+
+      if (isNaN(drawerNumberInt) || drawerNumberInt < 1) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request',
+          message: 'Drawer index must be a positive integer',
+        });
+        return;
+      }
+
+      await this.devicesService.openDrawer(id, drawerNumberInt);
+
+      res.status(200).json({
+        success: true,
+        message: `Drawer ${drawerNumberInt} open command queued successfully`,
+      });
+    } catch (error) {
+      let statusCode = 500;
+
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          statusCode = 404;
+        } else if (error.message.includes('Invalid') || error.message.includes('out of range')) {
+          statusCode = 400;
+        }
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        error: 'Failed to queue open drawer command',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
+
+  /**
+   * Confirm command execution for a device
+   * @param req - Express request object
+   * @param res - Express response object
+   */
+  confirmCommandExecution = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const command: string = req.body as string;
+
+      await this.devicesService.updateLastCommandExecution(id, command);
+
+      res.status(200).json({
+        success: true,
+        message: 'Command execution confirmed',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to confirm command execution',
         message: error instanceof Error ? error.message : 'Unknown error',
       });
     }

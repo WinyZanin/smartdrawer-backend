@@ -15,11 +15,23 @@ datasource db {
 }
 
 model Device {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   name      String
   location  String?
-  status    String   @default("INACTIVE") // INACTIVE | ACTIVE | ERROR
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  secret    String   @default(cuid())
+  status    String        @default("INACTIVE")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  secret    String        @default(cuid())
+  deviceStatus DeviceStatus?
+}
+
+model DeviceStatus {
+  id          String   @id @default(cuid())
+  deviceId    String   @unique
+  lastPoll    DateTime
+  lastCommand DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  device   Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 }

@@ -281,6 +281,23 @@ export class DevicesService {
   }
 
   /**
+   * Get the status of a specific device
+   * @param id - The device ID
+   * @returns The status of the device
+   */
+  async getDeviceStatus(id: string) {
+    try {
+      const status = await this.devicesRepository.getDeviceStatus(id);
+      if (!status) {
+        throw new Error(`Device with ID ${id} not found`);
+      }
+      return status;
+    } catch {
+      throw new Error('Failed to retrieve device status');
+    }
+  }
+
+  /**
    * Private method to validate device status
    * @param status - The status to validate
    * @returns boolean True if valid, false otherwise
@@ -290,14 +307,79 @@ export class DevicesService {
     return validStatuses.includes(status as DeviceStatus);
   }
 
+  /**
+   * Get the next command for a specific device
+   * @param id - The device ID
+   * @returns The next command for the device or null if none exists
+   */
   async getNextCommandForDevice(id: string): Promise<CommandDto | null> {
     const queue = this.commandsQueue[id] || [];
     const cmd = queue.length > 0 ? queue.shift() : undefined;
     return cmd === undefined ? null : cmd;
   }
 
+  /**
+   * Queue a command for a specific device
+   * @param id - The device ID
+   * @param command - The command to queue
+   */
   async queueCommandForDevice(id: string, command: CommandDto) {
     if (!this.commandsQueue[id]) this.commandsQueue[id] = [];
+    this.logger.debug('Queueing command for device', { id, command });
     this.commandsQueue[id].push(command);
+  }
+
+  /**
+   * Clear all queued commands for a specific device
+   * @param id - The device ID
+   */
+  async clearCommandQueue(id: string): Promise<void> {
+    if (this.commandsQueue[id]) {
+      this.logger.info('Clearing command queue for device', { id });
+      this.commandsQueue[id] = [];
+    }
+  }
+
+  /**
+   * Open a specific drawer for a device
+   * @param id - The device ID
+   * @param drawerNumber - The number of the drawer to open
+   */
+  async openDrawer(id: string, drawerNumber: number): Promise<void> {
+    if (!this.commandsQueue[id]) this.commandsQueue[id] = [];
+    const command: CommandDto = { action: 'open_drawer', drawer: drawerNumber };
+    this.logger.debug('Queueing open drawer command for device', { id, command });
+    this.commandsQueue[id].push(command);
+  }
+
+  /**
+   * Store a confirmed command execution result for a device
+   * device send a confirmation that a command was executed
+   * @param id - The device ID
+   * @param command - The command that was confirmed
+   */
+  async updateLastCommandExecution(id: string, command: string): Promise<void> {
+    try {
+      this.logger.info('Command confirmed by device', { id, command });
+      if (!command) {
+        throw new Error('No command provided for confirmation');
+      }
+      await this.devicesRepository.updateLastCommand(id);
+    } catch {
+      throw new Error(`Failed to confirm command for device with ID: ${id}`);
+    }
+  }
+
+  /**
+   * Update the last polling timestamp for a device
+   * @param id - The device ID
+   */
+  async updateLastPoll(id: string): Promise<void> {
+    try {
+      this.logger.debug('Updating last poll timestamp for device', { id });
+      await this.devicesRepository.updateLastPoll(id);
+    } catch {
+      throw new Error(`Failed to update last poll for device with ID: ${id}`);
+    }
   }
 }

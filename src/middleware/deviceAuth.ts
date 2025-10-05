@@ -5,6 +5,9 @@ import Logger from '../logger/logger';
 
 const logger = Logger.child({ component: 'DeviceAuthMiddleware' });
 
+/**
+ * Extends the Express Request interface to include device information
+ */
 export interface AuthenticatedRequest extends Request {
   device?: {
     sub: string;
@@ -12,6 +15,13 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+/**
+ * Middleware to authenticate device using JWT
+ * @param req - Express request object
+ * @param res - Express response object
+ * @param next - Next middleware function
+ * @returns JWT authentication result
+ */
 export function authenticateDeviceJWT(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const requestId = Math.random().toString(36).substring(7);
 

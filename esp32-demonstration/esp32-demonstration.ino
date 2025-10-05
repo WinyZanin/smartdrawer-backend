@@ -2,9 +2,11 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 
+int relayPin = 32;
+
 // ----------- Config Wi-Fi ----------
-const char *ssid = "ALDEIA DA FOLHA_2.4G";
-const char *password = "qwertyuiop";
+const char *ssid = "SSID";
+const char *password = "PASSWORD";
 
 // ---- CONFIGURAÇÕES ----
 // Credenciais do dispositivo
@@ -22,20 +24,18 @@ const String commandsEndpoint = String("/devices/") + device_id + "/next-command
 String jwtToken = "";
 
 // Intervalo de polling (em milissegundos)
-const unsigned long POLLING_INTERVAL = 5000; // 5 segundos
+const unsigned long POLLING_INTERVAL = 5000;  // 5 segundos
 unsigned long lastPolling = 0;
 
-void connectWiFi()
-{
-  WiFi.disconnect(true); // Desconecta e limpa config antiga
+void connectWiFi() {
+  WiFi.disconnect(true);  // Desconecta e limpa config antiga
   delay(1000);
 
   int retries = 0;
   Serial.print("Conectando ao WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED && retries < 20)
-  {
+  while (WiFi.status() != WL_CONNECTED && retries < 20) {
     delay(500);
     Serial.print(".");
     retries++;
@@ -52,8 +52,7 @@ void connectWiFi()
   }
 }
 
-bool checkServerHealth()
-{
+bool checkServerHealth() {
   HTTPClient http;
   Serial.print("Testando conectividade com servidor...");
 
@@ -80,8 +79,7 @@ bool checkServerHealth()
   return false;
 }
 
-bool authenticate()
-{
+bool authenticate() {
   HTTPClient http;
   Serial.println("Iniciando autenticação...");
 
@@ -119,35 +117,27 @@ bool authenticate()
   return false;
 }
 
-void sendStatus()
-{
-  if (jwtToken == "")
-  {
+void sendStatus() {
+  if (jwtToken == "") {
     Serial.println("Sem token, pulando envio de status...");
     return;
   }
 
   HTTPClient http;
-  if (http.begin(String(serverUrl) + statusEndpoint))
-  {
+  if (http.begin(String(serverUrl) + statusEndpoint)) {
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", "Bearer " + jwtToken);
 
     String payload = "{\"status\":\"ACTIVE\",\"message\":\"Device operating normally\",\"timestamp\":\"" + String(millis()) + "\"}";
     int code = http.POST(payload);
 
-    if (code == 200)
-    {
+    if (code == 200) {
       Serial.println("Status enviado com sucesso!");
-    }
-    else if (code == 401 || code == 403)
-    {
+    } else if (code == 401 || code == 403) {
       Serial.println("Token inválido/expirado. Reautenticando...");
       jwtToken = "";
       authenticate();
-    }
-    else
-    {
+    } else {
       Serial.printf("Erro enviando status: %d\n", code);
       Serial.println("Resposta: " + http.getString());
     }
@@ -155,10 +145,8 @@ void sendStatus()
   }
 }
 
-void pollForCommands()
-{
-  if (jwtToken == "")
-  {
+void pollForCommands() {
+  if (jwtToken == "") {
     Serial.println("Sem token, pulando polling de comandos...");
     return;
   }
@@ -166,32 +154,24 @@ void pollForCommands()
   HTTPClient http;
   String pollUrl = String(serverUrl) + commandsEndpoint;
 
-  if (http.begin(pollUrl))
-  {
+  if (http.begin(pollUrl)) {
     http.addHeader("Authorization", "Bearer " + jwtToken);
 
     int code = http.GET();
 
-    if (code == 200)
-    {
+    if (code == 200) {
       String response = http.getString();
       Serial.println("Comando recebido: " + response);
 
       // Aqui você pode adicionar lógica para processar o comando
       processCommand(response);
-    }
-    else if (code == 204)
-    {
+    } else if (code == 204) {
       Serial.println("Nenhum comando pendente");
-    }
-    else if (code == 401 || code == 403)
-    {
+    } else if (code == 401 || code == 403) {
       Serial.println("Token expirado no polling. Reautenticando...");
       jwtToken = "";
       authenticate();
-    }
-    else
-    {
+    } else {
       Serial.printf("Erro no polling: %d\n", code);
       Serial.println("Resposta: " + http.getString());
     }
@@ -199,21 +179,26 @@ void pollForCommands()
   }
 }
 
-void processCommand(String command)
-{
+void processCommand(String command) {
   Serial.println("Processando comando: " + command);
 
   // Aqui você pode adicionar a lógica para processar os comandos
   // Por exemplo:
-  // if (command.indexOf("turn_on") >= 0) {
-  //   // Ligar dispositivo
-  // } else if (command.indexOf("turn_off") >= 0) {
-  //   // Desligar dispositivo
-  // }
+  if (command.indexOf("turn_on") >= 0) {
+    // Ligar dispositivo
+    digitalWrite(relayPin, LOW);
+    delay(500);
+    digitalWrite(relayPin, HIGH);
+  } else if (command.indexOf("turn_off") >= 0) {
+    // Desligar dispositivo
+    digitalWrite(relayPin, HIGH);
+  }
 }
 
-void setup()
-{
+void setup() {
+  pinMode(relayPin, OUTPUT);     // Configurando o pino do relé
+  digitalWrite(relayPin, HIGH);  // Inicialmente desligado
+
   Serial.begin(115200);
   delay(2000);
 
@@ -221,8 +206,7 @@ void setup()
 
   // Passo 1: Conectar ao WiFi
   connectWiFi();
-  if (WiFi.status() != WL_CONNECTED)
-  {
+  if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Falha na conexão WiFi, reiniciando...");
     ESP.restart();
   }
@@ -243,8 +227,7 @@ void setup()
   lastPolling = millis();
 }
 
-void loop()
-{
+void loop() {
   // Verificar se WiFi ainda está conectado
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi desconectado! Tentando reconectar...");

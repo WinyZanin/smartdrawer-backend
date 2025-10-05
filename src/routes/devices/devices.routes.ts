@@ -46,6 +46,44 @@ const devicesController = new DevicesController(devicesService);
  */
 router.get('/stats', devicesController.getDeviceStats);
 
+/**
+ * @swagger
+ * /devices/stats/{id}:
+ *   get:
+ *     summary: Get statistics for a specific device
+ *     description: Retrieve statistics for a specific device using its unique identifier
+ *     tags: [Devices]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 1
+ *         description: The device unique identifier
+ *         example: clp123abc456def789
+ *     responses:
+ *       200:
+ *         description: Device statistics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/DeviceStat'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get('/stats/:id', devicesController.getDeviceStat);
+
 /**Public
  * @swagger
  * /devices:
@@ -391,20 +429,27 @@ router.get('/:id/next-command', authenticateDeviceJWT, devicesController.getNext
  *           schema:
  *             type: object
  *             properties:
- *               command:
+ *               action:
  *                 type: string
  *                 minLength: 1
- *                 description: The command to be executed
- *                 example: turn_on
+ *                 description: The action to be executed
+ *                 example: open_drawer
+ *               drawer:
+ *                 type: integer
+ *                 description: The drawer index to open
+ *                 example: 1
  *             required:
- *               - command
+ *               - action
+ *               - drawer
  *           examples:
  *             example1:
  *               value:
- *                 command: turn_on
+ *                 action: open_drawer
+ *                 drawer: 1
  *             example2:
  *               value:
- *                 command: turn_off
+ *                 action: open_drawer
+ *                 drawer: 2
  *     responses:
  *       201:
  *         description: Command created successfully
@@ -426,5 +471,141 @@ router.get('/:id/next-command', authenticateDeviceJWT, devicesController.getNext
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/:id/commands', devicesController.queueCommand);
+
+/**
+ * @swagger
+ * /devices/{id}/opendrawer/{drawerNumber}:
+ *   post:
+ *     summary: Open a specific drawer on the device
+ *     description: Send a command to the device to open a specified drawer. Requires device authentication.
+ *     tags: [Devices]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 1
+ *         description: The device unique identifier
+ *         example: clp123abc456def789
+ *       - in: path
+ *         name: drawerNumber
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: The Number of the drawer to open
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Drawer opened successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Command'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post('/:id/opendrawer/:drawerNumber', devicesController.openDrawer);
+
+/**
+ * @swagger
+ * /devices/{id}/commandconfirm:
+ *   post:
+ *     summary: Confirm command execution by device
+ *     description: Endpoint for devices to confirm that a command has been executed successfully. Requires device authentication.
+ *     tags: [Devices]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 1
+ *         description: The device unique identifier
+ *         example: clp123abc456def789
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               commandId:
+ *                 type: string
+ *                 description: The ID of the command that was executed
+ *                 example: "cmd_123abc456def789"
+ *               status:
+ *                 type: string
+ *                 enum: [SUCCESS, FAILED]
+ *                 description: The execution status of the command
+ *                 example: "SUCCESS"
+ *               message:
+ *                 type: string
+ *                 description: Optional message about the command execution
+ *                 example: "Drawer 1 opened successfully"
+ *               timestamp:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Timestamp when the command was executed
+ *                 example: "2025-10-04T14:30:00.000Z"
+ *             required:
+ *               - commandId
+ *               - status
+ *           examples:
+ *             success:
+ *               summary: Successful command execution
+ *               value:
+ *                 commandId: "cmd_123abc456def789"
+ *                 status: "SUCCESS"
+ *                 message: "Drawer 1 opened successfully"
+ *                 timestamp: "2025-10-04T14:30:00.000Z"
+ *             failed:
+ *               summary: Failed command execution
+ *               value:
+ *                 commandId: "cmd_123abc456def789"
+ *                 status: "FAILED"
+ *                 message: "Drawer mechanism jammed"
+ *                 timestamp: "2025-10-04T14:30:00.000Z"
+ *     responses:
+ *       200:
+ *         description: Command confirmation received successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Command execution confirmed"
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post('/:id/commandconfirm', authenticateDeviceJWT, devicesController.confirmCommandExecution);
 
 export default router;

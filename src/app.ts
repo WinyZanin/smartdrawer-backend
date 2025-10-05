@@ -31,15 +31,4 @@ app.use('/api/v1/devices', devicesRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1', healthRoutes);
 
-// rota teste para autenticação jwt e http com esp32
-//const SECRET = 'tester'; // precisa ser o mesmo usado no ESP32
-//app.get('/token', (req, res) => {
-//  const token = jwt.sign(
-//    { device: 'esp32-01', role: 'device' }, // payload
-//    SECRET,
-//    { algorithm: 'HS256', expiresIn: '1h' }, // expira em 1h
-//  );
-//  res.json({ token });
-//});
-
 export default app;

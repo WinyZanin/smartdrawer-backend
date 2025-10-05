@@ -86,13 +86,21 @@ export class DevicesRepository {
   async create(data: CreateDeviceDto): Promise<Device> {
     this.logger.debug('Creating new device', { deviceName: data.name });
     try {
+      const now = new Date();
       const device = await prisma.device.create({
         data: {
           name: data.name,
           location: data.location || null,
           status: data.status || 'INACTIVE',
           secret: data.secret,
+          deviceStatus: {
+            create: {
+              lastPoll: now,
+              lastCommand: now,
+            },
+          },
         },
+        include: { deviceStatus: true },
       });
       this.logger.info('Device created successfully', {
         deviceId: device.id,
@@ -106,6 +114,41 @@ export class DevicesRepository {
       });
       throw error;
     }
+  }
+
+  /**
+   * Atualiza o lastPoll de um DeviceStatus
+   * @param deviceId - O ID do dispositivo
+   * @returns Promise<void>
+   */
+  async updateLastPoll(deviceId: string): Promise<void> {
+    await prisma.deviceStatus.update({
+      where: { deviceId },
+      data: { lastPoll: new Date() },
+    });
+  }
+
+  /**
+   * Atualiza o lastCommand de um DeviceStatus
+   * @param deviceId - O ID do dispositivo
+   * @returns Promise<void>
+   */
+  async updateLastCommand(deviceId: string): Promise<void> {
+    await prisma.deviceStatus.update({
+      where: { deviceId },
+      data: { lastCommand: new Date() },
+    });
+  }
+
+  /**
+   * Busca o status de um dispositivo
+   * @param deviceId - O ID do dispositivo
+   * @returns Promise<DeviceStatus | null>
+   */
+  async getDeviceStatus(deviceId: string) {
+    return prisma.deviceStatus.findUnique({
+      where: { deviceId },
+    });
   }
 
   /**

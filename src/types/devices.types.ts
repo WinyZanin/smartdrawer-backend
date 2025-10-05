@@ -60,5 +60,6 @@ export interface UpdateDeviceDto {
 }
 
 export interface CommandDto {
-  command: string;
+  action: string;
+  drawer: number;
 }
