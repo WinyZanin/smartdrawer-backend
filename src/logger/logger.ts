@@ -1,9 +1,19 @@
 import winston from 'winston';
 
+// Type-safe log levels
+export type LogLevel = 'error' | 'warn' | 'info' | 'http' | 'debug';
+
 // Define your severity levels.
-// With them, You can create log files,
-// see or hide levels based on the running ENV.
-const levels = {
+// Available log levels (from lowest to highest priority):
+// - debug: 4 - Detailed information for debugging
+// - http: 3 - HTTP requests/responses
+// - info: 2 - General information
+// - warn: 1 - Warning messages
+// - error: 0 - Error messages only
+//
+// Set LOG_LEVEL environment variable to control logging:
+// LOG_LEVEL=error (only errors), LOG_LEVEL=info (info, warn, error), etc.
+const levels: Record<LogLevel, number> = {
   error: 0,
   warn: 1,
   info: 2,
@@ -11,14 +21,51 @@ const levels = {
   debug: 4,
 };
 
-// This method set the current severity based on
-// the current NODE_ENV: show all the log levels
-// if the server was run in development mode; otherwise,
-// if it was run in production, show only warn and error messages.
-const level = () => {
+// Configuration interface for better structure
+interface LoggerConfig {
+  level: LogLevel;
+  source: 'LOG_LEVEL env var' | 'NODE_ENV fallback';
+  isValid: boolean;
+}
+
+// This method determines the current severity based on
+// the LOG_LEVEL environment variable or fallback to NODE_ENV behavior
+const getLoggerConfig = (): LoggerConfig => {
+  const validLevels = Object.keys(levels) as LogLevel[];
+
+  // Check if LOG_LEVEL is explicitly set
+  if (process.env.LOG_LEVEL) {
+    const logLevel = process.env.LOG_LEVEL.toLowerCase() as LogLevel;
+
+    // Validate that the log level is supported
+    if (validLevels.includes(logLevel)) {
+      return {
+        level: logLevel,
+        source: 'LOG_LEVEL env var',
+        isValid: true,
+      };
+    }
+
+    // Invalid LOG_LEVEL provided - we'll log this later with winston
+    return {
+      level: getDefaultLevel(),
+      source: 'NODE_ENV fallback',
+      isValid: false,
+    };
+  }
+
+  // No LOG_LEVEL set, use NODE_ENV fallback
+  return {
+    level: getDefaultLevel(),
+    source: 'NODE_ENV fallback',
+    isValid: true,
+  };
+};
+
+// Get default level based on NODE_ENV
+const getDefaultLevel = (): LogLevel => {
   const env = process.env.NODE_ENV || 'development';
-  const isDevelopment = env === 'development';
-  return isDevelopment ? 'debug' : 'warn';
+  return env === 'development' ? 'debug' : 'warn';
 };
 
 // Define different colors for each level.
@@ -80,13 +127,30 @@ const transports = [
   new winston.transports.File({ filename: 'logs/all.log' }),
 ];
 
+// Get logger configuration
+const config = getLoggerConfig();
+
 // Create the logger instance that has to be exported
 // and used to log messages.
 const Logger = winston.createLogger({
-  level: level(),
+  level: config.level,
   levels,
   format,
   transports,
 });
 
+// Function to log initial configuration information
+const logInitialConfig = (logger: winston.Logger) => {
+  const config = getLoggerConfig();
+
+  // Log invalid LOG_LEVEL warning if needed
+  if (!config.isValid && process.env.LOG_LEVEL) {
+    logger.warn(`Invalid LOG_LEVEL: ${process.env.LOG_LEVEL}. Using default level.`);
+  }
+
+  logger.info(`Logger initialized with level: ${config.level} (from ${config.source})`);
+};
+
+// Export both the logger and the initialization function
+export { logInitialConfig };
 export default Logger;

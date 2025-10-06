@@ -1,9 +1,10 @@
-import app from './app';
 import dotenv from 'dotenv';
-import Logger from './logger/logger';
 
-// import config
+// Load environment variables first, before any other imports that might use them
 dotenv.config();
+
+import app from './app';
+import Logger from './logger/logger';
 const PORT = process.env.PORT || 3000;
 
 // start server

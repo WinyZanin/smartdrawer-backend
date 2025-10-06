@@ -335,6 +335,12 @@ const logger = Logger.child({ component: 'Swagger' });
  * @param app - Express application instance
  */
 export const setupSwagger = (app: Application): void => {
+  // Security check: do not setup Swagger in production
+  if (process.env.NODE_ENV === 'production') {
+    logger.warn('Swagger setup attempted in production environment - skipping for security');
+    return;
+  }
+
   // Swagger UI setup
   app.use(
     '/api-docs',

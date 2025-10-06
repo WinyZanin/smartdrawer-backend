@@ -4,7 +4,7 @@ import { json } from 'body-parser';
 import devicesRoutes from './routes/devices/devices.routes';
 import healthRoutes from './routes/health.routes';
 import { setupSwagger } from './config/swagger';
-import Logger from './logger/logger';
+import Logger, { logInitialConfig } from './logger/logger';
 import morganMiddleware from './logger/morganMiddleware';
 import authRoutes from './routes/auth.routes';
 //import jwt from 'jsonwebtoken';
@@ -14,6 +14,9 @@ import authRoutes from './routes/auth.routes';
  */
 const app = express();
 
+// Initialize logger configuration logging
+logInitialConfig(Logger);
+
 // Middlewares
 app.use(cors());
 app.use(json());
@@ -21,8 +24,13 @@ app.use(json());
 // Morgan middleware
 app.use(morganMiddleware);
 
-// Setup Swagger documentation
-setupSwagger(app);
+// Setup Swagger documentation (only in development)
+if (process.env.NODE_ENV !== 'production') {
+  setupSwagger(app);
+  Logger.info('Swagger documentation enabled for development');
+} else {
+  Logger.info('Swagger documentation disabled in production');
+}
 
 Logger.info('App initialized');
 
