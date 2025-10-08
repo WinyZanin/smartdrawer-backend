@@ -1,0 +1,41 @@
+version: '3.8'
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smartdrawer-backend:latest
+    container_name: smartdrawer-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '3000:3000'
+    depends_on:
+      - db
+    environment:
+      NODE_ENV: production
+    volumes:
+      - .:/app
+    networks:
+      - smartdrawer-net
+  db:
+    image: mysql:8.0
+    container_name: smartdrawer-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - '3306:3306'
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - smartdrawer-net
+volumes:
+  db_data:
+networks:
+  smartdrawer-net:
+    driver: bridge
