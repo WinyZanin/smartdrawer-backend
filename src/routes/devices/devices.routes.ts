@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { DevicesController } from '../../controllers/devices/DevicesController';
 import { devicesService } from '../../container';
 import { authenticateDeviceJWT } from '../../middleware/deviceAuth';
+import { authenticateApiKey } from '../../middleware/apiKeyAuth';
 
 /**
  * Devices Routes
@@ -26,8 +27,10 @@ const devicesController = new DevicesController(devicesService);
  * /devices/stats:
  *   get:
  *     summary: Get device statistics
- *     description: Retrieve aggregated statistics about all devices in the system
+ *     description: Retrieve aggregated statistics about all devices in the system. Requires API Key authentication.
  *     tags: [Devices]
+ *     security:
+ *       - apiKeyAuth: []
  *     responses:
  *       200:
  *         description: Device statistics retrieved successfully
@@ -44,15 +47,17 @@ const devicesController = new DevicesController(devicesService);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/stats', devicesController.getDeviceStats);
+router.get('/stats', authenticateApiKey, devicesController.getDeviceStats);
 
 /**
  * @swagger
  * /devices/stats/{id}:
  *   get:
  *     summary: Get statistics for a specific device
- *     description: Retrieve statistics for a specific device using its unique identifier
+ *     description: Retrieve statistics for a specific device using its unique identifier. Requires API Key authentication.
  *     tags: [Devices]
+ *     security:
+ *       - apiKeyAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -82,15 +87,17 @@ router.get('/stats', devicesController.getDeviceStats);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/stats/:id', devicesController.getDeviceStat);
+router.get('/stats/:id', authenticateApiKey, devicesController.getDeviceStat);
 
-/**Public
+/**
  * @swagger
  * /devices:
  *   get:
  *     summary: Get all devices or filter by query parameters
- *     description: Retrieve all devices from the system, optionally filtered by status or location
+ *     description: Retrieve all devices from the system, optionally filtered by status and/or location. Both filters can be combined. Location filter uses partial matching (contains). Examples - /devices (all), /devices?status=ACTIVE (active only), /devices?location=Building (contains "Building"), /devices?status=ACTIVE&location=Floor (active on any floor). Requires API Key authentication.
  *     tags: [Devices]
+ *     security:
+ *       - apiKeyAuth: []
  *     parameters:
  *       - in: query
  *         name: status
@@ -98,14 +105,14 @@ router.get('/stats/:id', devicesController.getDeviceStat);
  *         schema:
  *           type: string
  *           enum: [ACTIVE, INACTIVE, ERROR]
- *         description: Filter devices by status
+ *         description: Filter devices by status. Can be combined with location filter.
  *         example: ACTIVE
  *       - in: query
  *         name: location
  *         required: false
  *         schema:
  *           type: string
- *         description: Filter devices by location
+ *         description: Filter devices by location using partial matching (case-sensitive contains). Can be combined with status filter.
  *         example: Building A
  *     responses:
  *       200:
@@ -138,20 +145,34 @@ router.get('/stats/:id', devicesController.getDeviceStat);
  *                       example: Building A
  *       400:
  *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         description: Unauthorized - Invalid or missing API key
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/', (req, res) => {
+router.get('/', authenticateApiKey, (req, res) => {
   const { status, location } = req.query;
 
+  // If both filters are provided, use the combined filter method
+  if (status && location) {
+    return devicesController.getDevicesByFilters(req, res);
+  }
+
+  // If only status filter is provided
   if (status) {
     return devicesController.getDevicesByStatus(req, res);
   }
 
+  // If only location filter is provided
   if (location) {
     return devicesController.getDevicesByLocation(req, res);
   }
 
+  // If no filters provided, return all devices
   return devicesController.getAllDevices(req, res);
 });
 
@@ -159,9 +180,11 @@ router.get('/', (req, res) => {
  * @swagger
  * /devices/{id}:
  *   get:
- *     summary: Get a specific device by ID
- *     description: Retrieve a single device using its unique identifier
+ *     summary: Get device by ID
+ *     description: Retrieve a specific device by its ID with current status and last command information. Requires API Key authentication.
  *     tags: [Devices]
+ *     security:
+ *       - apiKeyAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -186,20 +209,28 @@ router.get('/', (req, res) => {
  *                   $ref: '#/components/schemas/Device'
  *       400:
  *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         description: Unauthorized - Invalid or missing API key
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/:id', devicesController.getDeviceById);
+router.get('/:id', authenticateApiKey, devicesController.getDeviceById);
 
 /**
  * @swagger
  * /devices:
  *   post:
  *     summary: Create a new device
- *     description: Create a new device in the system
+ *     description: Create a new device in the system. Requires API Key authentication.
  *     tags: [Devices]
+ *     security:
+ *       - apiKeyAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -248,18 +279,26 @@ router.get('/:id', devicesController.getDeviceById);
  *                   example: "Device created successfully"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         description: Unauthorized - Invalid or missing API key
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/', devicesController.createDevice);
+router.post('/', authenticateApiKey, devicesController.createDevice);
 
 /**
  * @swagger
  * /devices/{id}:
  *   put:
  *     summary: Update an existing device
- *     description: Update an existing device's information. At least one field must be provided.
+ *     description: Update an existing device's information. At least one field must be provided. Requires API Key authentication.
  *     tags: [Devices]
+ *     security:
+ *       - apiKeyAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -317,20 +356,28 @@ router.post('/', devicesController.createDevice);
  *                   example: "Device updated successfully"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         description: Unauthorized - Invalid or missing API key
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.put('/:id', devicesController.updateDevice);
+router.put('/:id', authenticateApiKey, devicesController.updateDevice);
 
 /**
  * @swagger
  * /devices/{id}:
  *   delete:
  *     summary: Delete a device
- *     description: Remove a device from the system permanently
+ *     description: Remove a device from the system permanently. Requires API Key authentication.
  *     tags: [Devices]
+ *     security:
+ *       - apiKeyAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -356,12 +403,18 @@ router.put('/:id', devicesController.updateDevice);
  *                   example: "Device deleted successfully"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         description: Unauthorized - Invalid or missing API key
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.delete('/:id', devicesController.deleteDevice);
+router.delete('/:id', authenticateApiKey, devicesController.deleteDevice);
 
 /**
  * @swagger
@@ -411,8 +464,10 @@ router.get('/:id/next-command', authenticateDeviceJWT, devicesController.getNext
  * /devices/{id}/commands:
  *   post:
  *     summary: Create a new command for a device
- *     description: Schedule a new command to be executed by a specific device
+ *     description: Schedule a new command to be executed by a specific device. Requires API Key authentication.
  *     tags: [Devices]
+ *     security:
+ *       - apiKeyAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -465,22 +520,28 @@ router.get('/:id/next-command', authenticateDeviceJWT, devicesController.getNext
  *                   $ref: '#/components/schemas/Command'
  *       400:
  *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         description: Unauthorized - Invalid or missing API key
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/:id/commands', devicesController.queueCommand);
+router.post('/:id/commands', authenticateApiKey, devicesController.queueCommand);
 
 /**
  * @swagger
  * /devices/{id}/opendrawer/{drawerNumber}:
  *   post:
  *     summary: Open a specific drawer on the device
- *     description: Send a command to the device to open a specified drawer. Requires device authentication.
+ *     description: Send a command to the device to open a specified drawer. Requires API Key authentication.
  *     tags: [Devices]
  *     security:
- *       - bearerAuth: []
+ *       - apiKeyAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -520,7 +581,7 @@ router.post('/:id/commands', devicesController.queueCommand);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/:id/opendrawer/:drawerNumber', devicesController.openDrawer);
+router.post('/:id/opendrawer/:drawerNumber', authenticateApiKey, devicesController.openDrawer);
 
 /**
  * @swagger

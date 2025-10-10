@@ -67,13 +67,35 @@ export class DevicesRepository {
   }
 
   /**
-   * Find devices by location
-   * @param location - The device location to filter by
-   * @returns Promise<Device[]> Array of devices at the specified location
+   * Find devices by location (partial match, case-insensitive)
+   * @param location - The device location to filter by (supports partial matching)
+   * @returns Promise<Device[]> Array of devices containing the location string
    */
   async findByLocation(location: string): Promise<Device[]> {
     return prisma.device.findMany({
-      where: { location },
+      where: {
+        location: {
+          contains: location,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Find devices by both status and location (partial location match, case-insensitive)
+   * @param status - The device status to filter by
+   * @param location - The device location to filter by (supports partial matching)
+   * @returns Promise<Device[]> Array of devices matching both criteria
+   */
+  async findByStatusAndLocation(status: string, location: string): Promise<Device[]> {
+    return prisma.device.findMany({
+      where: {
+        status,
+        location: {
+          contains: location,
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

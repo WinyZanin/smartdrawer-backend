@@ -161,6 +161,59 @@ export class DevicesController {
   };
 
   /**
+   * GET /devices?status=VALUE&location=VALUE
+   * Retrieve devices filtered by both status and location
+   */
+  getDevicesByFilters = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { status, location } = req.query;
+
+      if (!status || typeof status !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request',
+          message: 'Status parameter is required',
+        });
+        return;
+      }
+
+      if (!location || typeof location !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request',
+          message: 'Location parameter is required',
+        });
+        return;
+      }
+
+      // Validate status enum
+      if (!['ACTIVE', 'INACTIVE', 'ERROR'].includes(status)) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid request',
+          message: 'Status must be one of: ACTIVE, INACTIVE, ERROR',
+        });
+        return;
+      }
+
+      const devices = await this.devicesService.getDevicesByFilters(status as DeviceStatus, location);
+
+      res.status(200).json({
+        success: true,
+        data: devices,
+        count: devices.length,
+        filter: { status, location },
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: 'Failed to retrieve devices by filters',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
+
+  /**
    * POST /devices
    * Create a new device
    */

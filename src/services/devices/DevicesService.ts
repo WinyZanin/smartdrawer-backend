@@ -115,6 +115,24 @@ export class DevicesService {
   }
 
   /**
+   * Retrieve devices filtered by both status and location
+   * @param status - The status to filter by
+   * @param location - The location to filter by
+   * @returns Promise<Device[]> Array of devices matching both criteria
+   */
+  async getDevicesByFilters(status: DeviceStatus, location: string): Promise<Device[]> {
+    if (!location || location.trim() === '') {
+      throw new Error('Location cannot be empty');
+    }
+
+    try {
+      return await this.devicesRepository.findByStatusAndLocation(status, location);
+    } catch {
+      throw new Error(`Failed to retrieve devices with status: ${status} and location: ${location}`);
+    }
+  }
+
+  /**
    * Create a new device
    * @param deviceData - The device data to create
    * @returns Promise<Device> The created device

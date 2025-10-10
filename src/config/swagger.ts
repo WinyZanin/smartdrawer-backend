@@ -2,6 +2,22 @@
 import swaggerUi from 'swagger-ui-express';
 import { Application } from 'express';
 import Logger from '../logger/logger';
+
+// Get server URLs from environment variables
+const isDevelopment = process.env.NODE_ENV === 'development';
+const devUrl = `${process.env.API_URL_DEV || 'http://localhost:3000'}/api/v1`;
+const prodUrl = `${process.env.API_URL_PROD || 'https://api.smartdrawer.app'}/api/v1`;
+
+// Configure servers based on environment - current environment first
+const servers = isDevelopment
+  ? [
+      { url: devUrl, description: 'Development server (current)' },
+      { url: prodUrl, description: 'Production server' },
+    ]
+  : [
+      { url: prodUrl, description: 'Production server (current)' },
+      { url: devUrl, description: 'Development server' },
+    ];
 /**
  * Swagger Configuration
  *
@@ -25,16 +41,7 @@ const options = {
         url: 'https://opensource.org/licenses/MIT',
       },
     },
-    servers: [
-      {
-        url: 'http://localhost:3000/api/v1',
-        description: 'Development server',
-      },
-      {
-        url: 'https://api.smartdrawer.app/v1',
-        description: 'Production server',
-      },
-    ],
+    servers,
     tags: [
       {
         name: 'Devices',
@@ -61,6 +68,12 @@ const options = {
           scheme: 'bearer',
           bearerFormat: 'JWT',
           description: 'JWT token for device authentication. Obtain token from /auth/device endpoint.',
+        },
+        apiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key',
+          description: 'API Key for CRUD operations authentication. Contact system administrator to obtain API Key.',
         },
       },
       schemas: {
@@ -176,6 +189,56 @@ const options = {
             },
           },
         },
+        DeviceStat: {
+          type: 'object',
+          required: ['success', 'data'],
+          properties: {
+            success: {
+              type: 'boolean',
+              description: 'Indicates if the request was successful',
+              example: true,
+            },
+            data: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'string',
+                  description: 'Unique identifier for the device status',
+                  example: 'stat_123abc456def789',
+                },
+                deviceId: {
+                  type: 'string',
+                  description: 'ID of the associated device',
+                  example: 'clp123abc456def789',
+                },
+                lastPoll: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Timestamp of the last device poll',
+                  example: '2025-10-10T17:00:00.000Z',
+                },
+                lastCommand: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Timestamp of the last command sent to device',
+                  example: '2025-10-10T16:55:00.000Z',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Timestamp when the device status was created',
+                  example: '2025-10-10T10:00:00.000Z',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Timestamp when the device status was last updated',
+                  example: '2025-10-10T17:00:00.000Z',
+                },
+              },
+            },
+          },
+        },
         ApiResponse: {
           type: 'object',
           properties: {
@@ -254,6 +317,27 @@ const options = {
               type: 'string',
               description: 'Detailed error message',
               example: 'Device name is required and cannot be empty',
+            },
+          },
+        },
+        Error: {
+          type: 'object',
+          required: ['success', 'error'],
+          properties: {
+            success: {
+              type: 'boolean',
+              description: 'Indicates if the operation was successful',
+              example: false,
+            },
+            error: {
+              type: 'string',
+              description: 'Error message',
+              example: 'Unauthorized - Invalid or missing API key',
+            },
+            message: {
+              type: 'string',
+              description: 'Additional error details',
+              example: 'Please provide a valid API key in the X-API-Key header',
             },
           },
         },
