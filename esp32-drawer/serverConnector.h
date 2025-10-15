@@ -159,11 +159,8 @@ public:
         String response = http.getString();
         Serial.println("Command received: " + response);
 
-        // Here you can add logic to process the command
+        // Process the command (confirmation/failure is sent inside processCommand)
         processCommand(response);
-
-        // Send command confirmation back to server
-        sendCommandConfirmation(response);
       } else if (code == 204) {
         // No command available
         Serial.println("No pending command");
@@ -186,7 +183,7 @@ public:
 
   /**
    * Process the received command JSON
-   * Example command: {"action":"open_drawer","drawer":1}
+   * Example command: {"action":"open","drawer":1,"code":"ABC123XYZ"}
    * @param commandJson - JSON string representing the command
    */
   void processCommand(String commandJson) {
@@ -195,60 +192,159 @@ public:
     if (error) {
       Serial.print("Error parsing JSON: ");
       Serial.println(error.c_str());
+
+      // If we can't parse, we can't confirm
       return;
     }
 
-    // Extract action and drawer number
-    // can add more logic here for different actions or commands
+    // Extract action, drawer number, and command code
     const char* action = doc["action"];
-    int drawer = doc["drawer"];
+    int drawer = doc["drawer"] | 0;  // Default to 0 if not present
+    const char* code = doc["code"];
 
-    // Validate command
-    if (!action || drawer == 0) {
-      Serial.println("Invalid command: missing action or drawer");
+    // Validate command has a code (required for tracking)
+    if (!code) {
+      Serial.println("Invalid command: missing command code");
       return;
     }
 
-    // Execute command
-    if (strcmp(action, "open_drawer") == 0) {
-      drawerManager->openDrawer(drawer);  //send command to DrawerManager
+    // Validate action
+    if (!action) {
+      Serial.println("Invalid command: missing action");
+      sendCommandFailure(String(code), "Missing action field");
+      return;
+    }
+
+    Serial.print("Processing command - Code: ");
+    Serial.print(code);
+    Serial.print(", Action: ");
+    Serial.print(action);
+    Serial.print(", Drawer: ");
+    Serial.println(drawer);
+
+    // Execute command based on action
+    bool success = false;
+    String errorMsg = "";
+
+    if (strcmp(action, "open") == 0 || strcmp(action, "open_drawer") == 0) {
+      if (drawer == 0) {
+        errorMsg = "Invalid drawer number (must be >= 1)";
+        Serial.println("Error: " + errorMsg);
+      } else if (!drawerManager->isValidDrawer(drawer)) {
+        errorMsg = "Drawer " + String(drawer) + " does not exist (valid: 1-" + String(sizeof(drawerPins) / sizeof(drawerPins[0])) + ")";
+        Serial.println("Error: " + errorMsg);
+      } else {
+        success = drawerManager->openDrawer(drawer);  // Send command to DrawerManager
+        if (!success) {
+          errorMsg = "Hardware failure opening drawer " + String(drawer);
+          Serial.println("Error: " + errorMsg);
+        }
+      }
+    } else if (strcmp(action, "close") == 0) {
+      // Add close logic here if needed
+      Serial.println("Close action not yet implemented");
+      errorMsg = "Action not implemented: close";
     } else {
       Serial.print("Unknown action: ");
       Serial.println(action);
+      errorMsg = "Unknown action: " + String(action);
+    }
+
+    // Send confirmation or failure to server
+    if (success) {
+      sendCommandConfirmation(String(code));
+    } else {
+      sendCommandFailure(String(code), errorMsg);
     }
   }
 
   /**
    * Send command execution confirmation to the server
-   * @param commandId - ID of the command to confirm
+   * Uses the new tracking system with unique command codes
+   * @param commandCode - Unique code of the command to confirm as executed
    */
-  void sendCommandConfirmation(const String command) {
+  void sendCommandConfirmation(const String commandCode) {
     if (jwtToken == "") {
       Serial.println("No token, skipping command confirmation...");
       return;
     }
 
     HTTPClient http;
-    String confirmUrl = String(serverUrl) + commandsEndpoint + device_id + "/commandconfirm";
+    // New endpoint: POST /commands/:code/execute
+    String confirmUrl = String(serverUrl) + "/commands/" + commandCode + "/execute";
 
     if (http.begin(confirmUrl)) {
       http.addHeader("Content-Type", "application/json");
       http.addHeader("Authorization", "Bearer " + jwtToken);
 
-      //String payload = "{\"command\":\"" + command + "\",\"status\":\"executed\",\"timestamp\":\"" + String(millis()) + "\"}";
-      int code = http.POST(command);
+      // Send POST request (empty body is fine for this endpoint)
+      String payload = "{}";
+      int code = http.POST(payload);
 
       if (code == 200) {
-        Serial.println("Command confirmation sent successfully!");
+        Serial.println("✓ Command marked as EXECUTED on server (code: " + commandCode + ")");
       } else if (code == 401 || code == 403) {
         Serial.println("Invalid/expired token. Reauthenticating...");
         jwtToken = "";
         authenticate();
-      } else {
-        Serial.printf("Error sending command confirmation: %d\n", code);
+      } else if (code == 404) {
+        Serial.println("✗ Command not found on server (code: " + commandCode + ")");
+      } else if (code == 400) {
+        Serial.println("✗ Command already processed (code: " + commandCode + ")");
         Serial.println("Response: " + http.getString());
+      } else {
+        Serial.printf("✗ Error confirming command (HTTP %d): ", code);
+        Serial.println(http.getString());
       }
       http.end();
+    } else {
+      Serial.println("✗ Failed to connect to confirmation endpoint");
+    }
+  }
+
+  /**
+   * Send command failure notification to the server
+   * Uses the new tracking system with unique command codes
+   * @param commandCode - Unique code of the command that failed
+   * @param errorMessage - Description of why the command failed
+   */
+  void sendCommandFailure(const String commandCode, const String errorMessage) {
+    if (jwtToken == "") {
+      Serial.println("No token, skipping command failure report...");
+      return;
+    }
+
+    HTTPClient http;
+    // New endpoint: POST /commands/:code/fail
+    String failUrl = String(serverUrl) + "/commands/" + commandCode + "/fail";
+
+    if (http.begin(failUrl)) {
+      http.addHeader("Content-Type", "application/json");
+      http.addHeader("Authorization", "Bearer " + jwtToken);
+
+      // Send error message in the body
+      String payload = "{\"errorMessage\":\"" + errorMessage + "\"}";
+      int code = http.POST(payload);
+
+      if (code == 200) {
+        Serial.println("✓ Command marked as FAILED on server (code: " + commandCode + ")");
+        Serial.println("  Reason: " + errorMessage);
+      } else if (code == 401 || code == 403) {
+        Serial.println("Invalid/expired token. Reauthenticating...");
+        jwtToken = "";
+        authenticate();
+      } else if (code == 404) {
+        Serial.println("✗ Command not found on server (code: " + commandCode + ")");
+      } else if (code == 400) {
+        Serial.println("✗ Command already processed (code: " + commandCode + ")");
+        Serial.println("Response: " + http.getString());
+      } else {
+        Serial.printf("✗ Error reporting failure (HTTP %d): ", code);
+        Serial.println(http.getString());
+      }
+      http.end();
+    } else {
+      Serial.println("✗ Failed to connect to failure endpoint");
     }
   }
 

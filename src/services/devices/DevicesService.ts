@@ -1,5 +1,6 @@
 import { DevicesRepository } from '../../repositories/devices/DevicesRepository';
 import { Device, CreateDeviceDto, UpdateDeviceDto, DeviceStatus, CommandDto } from '../../types/devices.types';
+import { CommandsService } from '../commands/CommandsService';
 import Logger from '../../logger/logger';
 
 /**
@@ -11,15 +12,17 @@ import Logger from '../../logger/logger';
  */
 export class DevicesService {
   private devicesRepository: DevicesRepository;
-  private commandsQueue: Record<string, CommandDto[]> = {}; // Exemplo em memória
+  private commandsService: CommandsService;
   private logger = Logger.child({ component: 'DevicesService' });
 
   /**
-   * Constructor - Injects the DevicesRepository dependency
+   * Constructor - Injects the DevicesRepository and CommandsService dependencies
    * @param devicesRepository - The repository to handle data operations
+   * @param commandsService - The service to handle command operations
    */
-  constructor(devicesRepository: DevicesRepository) {
+  constructor(devicesRepository: DevicesRepository, commandsService: CommandsService) {
     this.devicesRepository = devicesRepository;
+    this.commandsService = commandsService;
     this.logger.debug('DevicesService initialized');
   }
 
@@ -164,11 +167,19 @@ export class DevicesService {
       throw new Error('Invalid device status provided');
     }
 
+    // Business rule: Validate drawerCount if provided
+    if (deviceData.drawerCount !== undefined) {
+      if (!Number.isInteger(deviceData.drawerCount) || deviceData.drawerCount < 1 || deviceData.drawerCount > 20) {
+        throw new Error('Drawer count must be an integer between 1 and 20');
+      }
+    }
+
     try {
       const device = await this.devicesRepository.create({
         name: deviceData.name.trim(),
         location: deviceData.location ? deviceData.location.trim() : null,
         status: deviceData.status || 'INACTIVE',
+        drawerCount: deviceData.drawerCount || 4,
         secret: deviceData.secret.trim(),
       });
 
@@ -192,7 +203,13 @@ export class DevicesService {
     }
 
     // Business rule: At least one field must be provided for update
-    if (!deviceData.name && !deviceData.location && !deviceData.status && !deviceData.secret) {
+    if (
+      !deviceData.name &&
+      !deviceData.location &&
+      !deviceData.status &&
+      !deviceData.secret &&
+      deviceData.drawerCount === undefined
+    ) {
       throw new Error('At least one field must be provided for update');
     }
 
@@ -227,6 +244,13 @@ export class DevicesService {
       }
     }
 
+    // Business rule: DrawerCount validation if provided
+    if (deviceData.drawerCount !== undefined) {
+      if (!Number.isInteger(deviceData.drawerCount) || deviceData.drawerCount < 1 || deviceData.drawerCount > 20) {
+        throw new Error('Drawer count must be an integer between 1 and 20');
+      }
+    }
+
     try {
       const updateData: UpdateDeviceDto = {};
 
@@ -238,6 +262,9 @@ export class DevicesService {
       }
       if (deviceData.status !== undefined) {
         updateData.status = deviceData.status;
+      }
+      if (deviceData.drawerCount !== undefined) {
+        updateData.drawerCount = deviceData.drawerCount;
       }
       if (deviceData.secret !== undefined) {
         updateData.secret = deviceData.secret.trim();
@@ -331,30 +358,60 @@ export class DevicesService {
    * @returns The next command for the device or null if none exists
    */
   async getNextCommandForDevice(id: string): Promise<CommandDto | null> {
-    const queue = this.commandsQueue[id] || [];
-    const cmd = queue.length > 0 ? queue.shift() : undefined;
-    return cmd === undefined ? null : cmd;
+    try {
+      const command = await this.commandsService.getNextPendingCommand(id);
+
+      if (!command) {
+        return null;
+      }
+
+      // Convert database command format to CommandDto format
+      return {
+        action: command.action.toLowerCase().replace('_', ' '), // Convert 'OPEN' to 'open'
+        drawer: command.drawer ?? undefined,
+        code: command.code, // Include the unique code for tracking
+      };
+    } catch (error) {
+      this.logger.error('Failed to get next command for device', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        deviceId: id,
+      });
+      return null;
+    }
   }
 
   /**
    * Queue a command for a specific device
    * @param id - The device ID
    * @param command - The command to queue
+   * @returns Promise<string> The unique command code
    */
-  async queueCommandForDevice(id: string, command: CommandDto) {
-    if (!this.commandsQueue[id]) this.commandsQueue[id] = [];
+  async queueCommandForDevice(id: string, command: CommandDto): Promise<string> {
     this.logger.debug('Queueing command for device', { id, command });
-    this.commandsQueue[id].push(command);
-  }
 
-  /**
-   * Clear all queued commands for a specific device
-   * @param id - The device ID
-   */
-  async clearCommandQueue(id: string): Promise<void> {
-    if (this.commandsQueue[id]) {
-      this.logger.info('Clearing command queue for device', { id });
-      this.commandsQueue[id] = [];
+    try {
+      // Convert action to uppercase format (e.g., 'open' -> 'OPEN')
+      const action = command.action.toUpperCase().replace(' ', '_');
+
+      const createdCommand = await this.commandsService.createCommand({
+        deviceId: id,
+        action,
+        drawer: command.drawer,
+      });
+
+      this.logger.info('Command queued successfully', {
+        deviceId: id,
+        commandCode: createdCommand.code,
+      });
+
+      return createdCommand.code;
+    } catch (error) {
+      this.logger.error('Failed to queue command', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        deviceId: id,
+        command,
+      });
+      throw new Error('Failed to queue command for device');
     }
   }
 
@@ -362,12 +419,31 @@ export class DevicesService {
    * Open a specific drawer for a device
    * @param id - The device ID
    * @param drawerNumber - The number of the drawer to open
+   * @returns Promise<string> The unique command code
+   * @throws Error if device not found or drawer is invalid
    */
-  async openDrawer(id: string, drawerNumber: number): Promise<void> {
-    if (!this.commandsQueue[id]) this.commandsQueue[id] = [];
-    const command: CommandDto = { action: 'open_drawer', drawer: drawerNumber };
-    this.logger.debug('Queueing open drawer command for device', { id, command });
-    this.commandsQueue[id].push(command);
+  async openDrawer(id: string, drawerNumber: number): Promise<string> {
+    // Validate drawer number
+    if (!Number.isInteger(drawerNumber) || drawerNumber < 1) {
+      throw new Error('Drawer number must be a positive integer');
+    }
+
+    // Get device to check drawer count
+    const device = await this.devicesRepository.findById(id);
+    if (!device) {
+      throw new Error(`Device with ID ${id} not found`);
+    }
+
+    // Validate drawer exists for this device
+    if (drawerNumber > device.drawerCount) {
+      throw new Error(
+        `Drawer ${drawerNumber} does not exist. This device has ${device.drawerCount} drawer${device.drawerCount !== 1 ? 's' : ''} (valid: 1-${device.drawerCount})`,
+      );
+    }
+
+    const command: CommandDto = { action: 'open', drawer: drawerNumber };
+    this.logger.debug('Queueing open drawer command for device', { id, drawerNumber });
+    return await this.queueCommandForDevice(id, command);
   }
 
   /**

@@ -113,7 +113,7 @@ router.get('/stats/:id', authenticateApiKey, devicesController.getDeviceStat);
  *         schema:
  *           type: string
  *         description: Filter devices by location using partial matching (case-sensitive contains). Can be combined with status filter.
- *         example: Building A
+ *         example:
  *     responses:
  *       200:
  *         description: Devices retrieved successfully
@@ -256,6 +256,13 @@ router.get('/:id', authenticateApiKey, devicesController.getDeviceById);
  *                 enum: [ACTIVE, INACTIVE, ERROR]
  *                 description: The device status
  *                 example: "INACTIVE"
+ *               drawerCount:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 20
+ *                 default: 4
+ *                 description: Number of drawers this device has
+ *                 example: 4
  *               secret:
  *                 type: string
  *                 minLength: 6
@@ -321,6 +328,7 @@ router.post('/', authenticateApiKey, devicesController.createDevice);
  *                 name: "Updated Drawer Unit"
  *                 location: "Building B - Floor 3"
  *                 status: "ACTIVE"
+ *                 drawerCount: 6
  *                 secret: "newsecret456"
  *             partial_update:
  *               summary: Update only status
@@ -332,6 +340,11 @@ router.post('/', authenticateApiKey, devicesController.createDevice);
  *               value:
  *                 name: "Relocated Drawer"
  *                 location: "New Building - Floor 1"
+ *                 secret: "newsecret456"
+ *             drawer_count_update:
+ *               summary: Update drawer count
+ *               value:
+ *                 drawerCount: 8
  *                 secret: "newsecret456"
  *             clear_location:
  *               summary: Clear location (set to null)

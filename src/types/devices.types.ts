@@ -18,6 +18,8 @@ export interface Device {
   location: string | null;
   /** Current status of the device */
   status: string;
+  /** Number of drawers this device has */
+  drawerCount: number;
   /** Timestamp when the device was created */
   createdAt: Date;
   /** Timestamp when the device was last updated */
@@ -41,6 +43,8 @@ export interface CreateDeviceDto {
   location?: string | null;
   /** Optional initial status (defaults to INACTIVE) */
   status?: string;
+  /** Number of drawers (defaults to 4) */
+  drawerCount?: number;
   /** Secret key for device authentication */
   secret: string;
 }
@@ -55,11 +59,14 @@ export interface UpdateDeviceDto {
   location?: string | null;
   /** Optional updated status */
   status?: string;
+  /** Optional updated drawer count */
+  drawerCount?: number;
   /** Optional updated secret */
   secret?: string;
 }
 
 export interface CommandDto {
   action: string;
-  drawer: number;
+  drawer?: number;
+  code?: string; // Unique command code for tracking
 }

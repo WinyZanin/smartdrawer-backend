@@ -505,11 +505,12 @@ export class DevicesController {
         return;
       }
 
-      await this.devicesService.openDrawer(id, drawerNumberInt);
+      const commandCode = await this.devicesService.openDrawer(id, drawerNumberInt);
 
       res.status(200).json({
         success: true,
         message: `Drawer ${drawerNumberInt} open command queued successfully`,
+        code: commandCode,
       });
     } catch (error) {
       let statusCode = 500;

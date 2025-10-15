@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { json } from 'body-parser';
 import devicesRoutes from './routes/devices/devices.routes';
+import commandsRoutes from './routes/commands/commands.routes';
 import healthRoutes from './routes/health.routes';
 import { setupSwagger } from './config/swagger';
 import Logger, { logInitialConfig } from './logger/logger';
@@ -36,6 +37,7 @@ Logger.info('App initialized');
 
 // rotas principais
 app.use('/api/v1/devices', devicesRoutes);
+app.use('/api/v1/commands', commandsRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1', healthRoutes);
 

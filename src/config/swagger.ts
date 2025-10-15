@@ -79,7 +79,7 @@ const options = {
       schemas: {
         Device: {
           type: 'object',
-          required: ['id', 'name', 'status', 'createdAt', 'updatedAt'],
+          required: ['id', 'name', 'status', 'drawerCount', 'createdAt', 'updatedAt'],
           properties: {
             id: {
               type: 'string',
@@ -102,6 +102,13 @@ const options = {
               enum: ['ACTIVE', 'INACTIVE', 'ERROR'],
               description: 'Current operational status of the device',
               example: 'ACTIVE',
+            },
+            drawerCount: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 20,
+              description: 'Number of drawers this device has',
+              example: 4,
             },
             createdAt: {
               type: 'string',
@@ -139,6 +146,13 @@ const options = {
               description: 'Initial status of the device',
               example: 'INACTIVE',
             },
+            drawerCount: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 20,
+              description: 'Number of drawers this device has (default: 4)',
+              example: 4,
+            },
           },
         },
         UpdateDeviceDto: {
@@ -161,6 +175,13 @@ const options = {
               enum: ['ACTIVE', 'INACTIVE', 'ERROR'],
               description: 'Updated status of the device',
               example: 'ACTIVE',
+            },
+            drawerCount: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 20,
+              description: 'Updated number of drawers this device has',
+              example: 6,
             },
           },
         },
