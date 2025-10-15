@@ -212,7 +212,7 @@ smartdrawer-backend/
 └────────────────┬────────────────────────┘
                  │
 ┌────────────────▼────────────────────────┐
-│       SQLite / PostgreSQL               │  ← Persistent storage
+│       SQLite / MySQL                    │  ← Persistent storage
 └─────────────────────────────────────────┘
 ```
 
@@ -442,7 +442,7 @@ Prisma ORM atua como adaptador entre a aplicação e o banco de dados.
 // Prisma adapta diferentes bancos de dados
 datasource db {
   provider = "sqlite"      // Dev: SQLite
-  // provider = "postgresql"  // Prod: PostgreSQL
+  // provider = "mysql"  // Prod: MySQL
   url = env("DATABASE_URL")
 }
 
@@ -452,7 +452,7 @@ await prisma.device.findMany();  // Funciona em ambos
 
 **Benefícios:**
 - ✅ Abstração de diferentes databases
-- ✅ Mesmo código para SQLite e PostgreSQL
+- ✅ Mesmo código para SQLite e MySQL
 - ✅ Facilita migração entre bancos
 
 ---
@@ -611,7 +611,7 @@ async openDrawer(deviceId: string, drawerNumber: number) {
 - **TypeScript** (5.8.3) - Type safety
 - **Express** (5.1.0) - Web framework
 - **Prisma ORM** (6.15.0) - Database toolkit
-- **SQLite** (dev) / **PostgreSQL** (prod) - Database
+- **SQLite** (dev) / **MySQL** (prod) - Database
 - **Winston** (3.17.0) - Logging
 - **Morgan** (1.10.1) - HTTP request logger
 
@@ -696,7 +696,7 @@ PORT=3000
 
 # Database
 DATABASE_URL="file:./prisma/dev.db"
-# Produção: DATABASE_URL="postgresql://user:password@host:5432/smartdrawer?schema=public"
+# Produção: DATABASE_URL="mysql://user:password@host:3306/smartdrawer"
 
 # JWT Configuration
 JWT_SECRET=seu-jwt-secret-super-seguro-aqui
@@ -1246,14 +1246,14 @@ cp prisma/dev.db prisma/dev.db.backup
 cp prisma/dev.db.backup prisma/dev.db
 ```
 
-#### PostgreSQL (Production)
+#### MySQL (Production)
 
 ```bash
 # Backup
-pg_dump -h host -U user -d smartdrawer > backup.sql
+mysqldump -h host -u user -p smartdrawer > backup.sql
 
 # Restore
-psql -h host -U user -d smartdrawer < backup.sql
+mysql -h host -u user -p smartdrawer < backup.sql
 ```
 
 ## 🚢 Deployment
@@ -1294,7 +1294,7 @@ npm install --production
 # .env para produção
 NODE_ENV=production
 PORT=3000
-DATABASE_URL="postgresql://user:pass@host:5432/smartdrawer"
+DATABASE_URL="mysql://user:pass@host:3306/smartdrawer"
 JWT_SECRET=<secret-forte-aqui>
 API_KEY=<api-key-forte-aqui>
 ```
@@ -1600,24 +1600,22 @@ O SmartDrawer foi criado com propósito **primariamente didático**, visando:
 
 ## 👤 Autor
 
-**SmartDrawer Team**
-
-- Email: contact@smartdrawer.app
-- GitHub: [@seu-usuario](https://github.com/seu-usuario)
+- Email: winy_zanin@hotmail.com
+- GitHub: [@WinyZanin](https://github.com/WinyZanin)
 - Instituição: Universidade do Estado de Mato Grosso (UNEMAT)
 - Curso: Sistemas de Informação
 
 ## 🙏 Agradecimentos
 
 - **UNEMAT** - Pela formação e infraestrutura
-- **Orientadores** - Pelo suporte e orientação durante o desenvolvimento
+- **Orientador Ivan Pires** - Pelo suporte e orientação durante o desenvolvimento
 - Prisma Team - ORM incrível
 - Express.js - Framework robusto
 - ESP32 Community - Suporte e exemplos
 
 ---
 
-**Status do Projeto**: ✅ TCC Concluído
+**Status do Projeto**: TCC parcialmente concluido
 
 **Tipo**: Trabalho de Conclusão de Curso (TCC)
 
@@ -1625,4 +1623,4 @@ O SmartDrawer foi criado com propósito **primariamente didático**, visando:
 
 **Última Atualização**: 14 de Outubro de 2025
 
-Para dúvidas ou suporte, abra uma [Issue](https://github.com/seu-usuario/smartdrawer-backend/issues) no GitHub.
+Para dúvidas ou suporte, abra uma [Issue](https://github.com/WinyZanin/smartdrawer-backend/issues) no GitHub.
